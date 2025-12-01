@@ -6,7 +6,7 @@ import datetime
 import re
 import os
 
-TOKEN = os.environ.get("BOT_TOKEN")  # или вставь свой токен напрямую
+TOKEN = os.environ.get("BOT_TOKEN")  # или вставь свой токен
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 # ==========================
@@ -21,47 +21,36 @@ def db_execute(query, params=(), fetch=False):
     conn.close()
     return data
 
-# Таблица размера груди
-db_execute("""
-CREATE TABLE IF NOT EXISTS boobs (
+# Таблицы
+db_execute("""CREATE TABLE IF NOT EXISTS boobs (
     chat_id TEXT,
     user_id TEXT,
     size INTEGER,
     last_date TEXT,
     PRIMARY KEY(chat_id, user_id)
-)
-""")
+)""")
 
-# Таблица ДР
-db_execute("""
-CREATE TABLE IF NOT EXISTS birthdays (
+db_execute("""CREATE TABLE IF NOT EXISTS birthdays (
     chat_id TEXT,
     user_id TEXT,
     date TEXT,
     PRIMARY KEY(chat_id, user_id)
-)
-""")
+)""")
 
-# Таблица для имен
-db_execute("""
-CREATE TABLE IF NOT EXISTS names (
+db_execute("""CREATE TABLE IF NOT EXISTS names (
     chat_id TEXT,
     user_id TEXT,
     display_name TEXT,
     PRIMARY KEY(chat_id, user_id)
-)
-""")
+)""")
 
-# Таблица для "кто же я"
-db_execute("""
-CREATE TABLE IF NOT EXISTS whoami (
+db_execute("""CREATE TABLE IF NOT EXISTS whoami (
     chat_id TEXT,
     user_id TEXT,
     choice TEXT,
     date TEXT,
     PRIMARY KEY(chat_id, user_id)
-)
-""")
+)""")
 
 # ==========================
 # ПОМОЩНИКИ
@@ -82,9 +71,7 @@ def change_boobs(chat_id, user_id):
     size, last = (row[0][0], row[0][1]) if row else (0, None)
     if last == today:
         return 0, size
-    delta = random.randint(-10,10)
-    if size + delta < 0:
-        delta = -size
+    delta = random.randint(1,10)  # рост груди один раз в день
     new_size = size + delta
     db_execute("INSERT OR REPLACE INTO boobs(chat_id,user_id,size,last_date) VALUES (?,?,?,?)",
                (chat_id,user_id,new_size,today))
@@ -110,50 +97,22 @@ def boob_word(n):
         return "грудей"
 
 # ==========================
-# СТАРТОВЫЕ КОМАНДЫ
+# КОМАНДЫ
 # ==========================
-@bot.message_handler(commands=['start','команды'])
-def cmd_start(m):
+@bot.message_handler(commands=['komands'])
+def cmd_komands(m):
     bot.reply_to(m, "Привет! Я бот с грудями 😏\n\n"
                     "Команды и функции:\n"
                     "сиськи — получить рост груди на сегодня 🍒\n"
                     "/my — показать свой размер груди 🍒\n"
                     "/buy_boobs — купить +1 груди за 5 ⭐ 🎉\n"
                     "/top — топ участников по размеру груди 😎\n"
-                    "/имя Лох — установить своё имя для отображения 😏\n"
+                    "/имя <имя> — установить своё имя для отображения 😏\n"
                     "/dr дд.мм.гггг — записать свой день рождения 🎂\n"
                     "/dr — показать свой день рождения 🎂\n"
                     "/dr all — список всех ДР в чате 🎂\n"
                     "кто же я — бот рандомно отвечает один раз в день 😉")
 
-# ==========================
-# ОБРАБОТКА СООБЩЕНИЙ В ЛС И ГРУППАХ
-# ==========================
-@bot.message_handler(func=lambda m: True)
-def general_handler(m):
-    text = m.text.lower()
-    chat_id = m.chat.id
-    user_id = m.from_user.id
-    name = get_display_name(chat_id, user_id) or m.from_user.first_name
-
-    # сиськи
-    if "сиськи" in text:
-        delta, new_size = change_boobs(chat_id, user_id)
-        if delta == 0:
-            bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
-        else:
-            bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{delta}</b>, теперь твой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
-        return
-
-    # кто же я
-    if "кто же я" in text:
-        answer = whoami(chat_id, user_id)
-        bot.reply_to(m, answer)
-        return
-
-# ==========================
-# МОЙ РАЗМЕР
-# ==========================
 @bot.message_handler(commands=['my'])
 def cmd_my(m):
     chat_id, user_id = str(m.chat.id), str(m.from_user.id)
@@ -164,9 +123,6 @@ def cmd_my(m):
         return
     bot.reply_to(m, f"✨ {name}, твой текущий размер груди: <b>{row[0][0]}</b> {boob_word(row[0][0])} 🍒")
 
-# ==========================
-# ТОП
-# ==========================
 @bot.message_handler(commands=['top'])
 def cmd_top(m):
     chat_id = str(m.chat.id)
@@ -180,9 +136,6 @@ def cmd_top(m):
         text += f"{i}. {name} — <b>{size}</b> {boob_word(size)} 🍒\n"
     bot.reply_to(m,text)
 
-# ==========================
-# ИМЯ
-# ==========================
 @bot.message_handler(commands=['имя'])
 def set_name(m):
     chat_id = str(m.chat.id)
@@ -196,9 +149,6 @@ def set_name(m):
                (chat_id,user_id,name_text))
     bot.reply_to(m,f"🎉 Ваше имя изменено на '{name_text}'")
 
-# ==========================
-# ДР
-# ==========================
 @bot.message_handler(commands=['dr'])
 def birthdays(m):
     chat_id = str(m.chat.id)
@@ -235,7 +185,30 @@ def birthdays(m):
     bot.reply_to(m,f"🎂 День рождения сохранён: {date_text}")
 
 # ==========================
-# ПОКУПКА +1 ГРУДИ ЗА 5 ⭐ (Telegram Stars)
+# ОБЩИЕ СООБЩЕНИЯ
+# ==========================
+@bot.message_handler(func=lambda m: True)
+def general_handler(m):
+    text = m.text.lower()
+    chat_id = m.chat.id
+    user_id = m.from_user.id
+    name = get_display_name(chat_id, user_id) or m.from_user.first_name
+
+    if "сиськи" in text:
+        delta, new_size = change_boobs(chat_id, user_id)
+        if delta == 0:
+            bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
+        else:
+            bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{delta}</b>, теперь твой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
+        return
+
+    if "кто же я" in text:
+        answer = whoami(chat_id, user_id)
+        bot.reply_to(m, answer)
+        return
+
+# ==========================
+# ПОКУПКА
 # ==========================
 PROVIDER_TOKEN = ""  # вставь сюда provider_token Telegram Stars
 
