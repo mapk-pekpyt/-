@@ -1,171 +1,273 @@
-import asyncio
+# main.py — проверенная telebot-версия (вставь свой токен или используй env BOT_TOKEN)
+import os
+import sqlite3
+import telebot
 import random
-from datetime import datetime
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message
+import datetime
+import re
 
-TOKEN = "ТВОЙ_ТОКЕН_БОТА"
+TOKEN = os.environ.get("BOT_TOKEN", "YOUR_TOKEN_HERE")
+bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
+DB = "boobs.db"
 
-# Хранилища данных
-user_boobs = {}          # user_id: int (общий размер груди)
-last_sisi_date = {}      # user_id: "YYYY-MM-DD"
-user_names = {}          # user_id: custom name
-daily_kto = {}           # user_id: {"date": str, "value": str}
+def db_conn():
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# ===== УТИЛИТЫ =====
+def db_execute(query, params=(), fetch=False):
+    conn = db_conn()
+    cur = conn.cursor()
+    cur.execute(query, params)
+    data = cur.fetchall() if fetch else None
+    conn.commit()
+    conn.close()
+    return data
 
-def get_name(message: Message):
-    """Имя пользователя: сначала кастомное, если нет — username, если нет — first_name."""
-    user_id = message.from_user.id
-    if user_id in user_names:
-        return user_names[user_id]
-    if message.from_user.username:
-        return message.from_user.username
-    return message.from_user.first_name or "Неизвестный"
+# Init tables
+db_execute("""CREATE TABLE IF NOT EXISTS boobs (
+    chat_id TEXT,
+    user_id TEXT,
+    size INTEGER,
+    last_date TEXT,
+    PRIMARY KEY(chat_id, user_id)
+)""")
 
-# ===== КОМАНДА /sisi =====
-@dp.message(F.text.lower() == "/sisi")
-async def cmd_sisi(message: Message):
-    user_id = message.from_user.id
-    name = get_name(message)
-    today = datetime.now().strftime("%Y-%m-%d")
+db_execute("""CREATE TABLE IF NOT EXISTS whoami (
+    chat_id TEXT,
+    user_id TEXT,
+    choice TEXT,
+    date TEXT,
+    PRIMARY KEY(chat_id, user_id)
+)""")
 
-    current_size = user_boobs.get(user_id, 0)
+db_execute("""CREATE TABLE IF NOT EXISTS names (
+    chat_id TEXT,
+    user_id TEXT,
+    display_name TEXT,
+    PRIMARY KEY(chat_id, user_id)
+)""")
 
-    # Если сегодня уже использовал
-    if last_sisi_date.get(user_id) == today:
-        await message.reply(
-            f"Ой, а ты уже пробовал сегодня 😅\n"
-            f"Твой текущий размер груди — {current_size} 🍒"
-        )
-        return
+db_execute("""CREATE TABLE IF NOT EXISTS birthdays (
+    chat_id TEXT,
+    user_id TEXT,
+    date TEXT,
+    PRIMARY KEY(chat_id, user_id)
+)""")
 
-    # Выдаём новый прирост
-    growth = random.randint(1, 10)
-    new_size = current_size + growth
-    user_boobs[user_id] = new_size
-    last_sisi_date[user_id] = today
-
-    await message.reply(
-        f"🍒 {name}, твой размер груди вырос на +{growth},\n"
-        f"теперь твой размер груди — {new_size} 🍒"
-    )
-
-# ===== КОМАНДА /my =====
-@dp.message(F.text.lower() == "/my")
-async def cmd_my(message: Message):
-    user_id = message.from_user.id
-    size = user_boobs.get(user_id, 0)
-    name = get_name(message)
-    await message.reply(f"{name}, твой текущий размер груди — {size} 🍒")
-
-# ===== КОМАНДА /kto =====
-@dp.message(F.text.lower() == "/kto")
-async def cmd_kto(message: Message):
-    user_id = message.from_user.id
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    if user_id in daily_kto and daily_kto[user_id]["date"] == today:
-        await message.reply(f"Сегодня ты — {daily_kto[user_id]['value']} 😏")
-        return
-
-    variants = [
-        "секси пельмешек 😈",
-        "наглый развратник 😏",
-        "милая булочка 😊",
-        "сладенький пирожочек 😘",
-        "главная сиська дня 😎",
-        "нежный цветочек 🌸"
-    ]
-
-    choice = random.choice(variants)
-    daily_kto[user_id] = {"date": today, "value": choice}
-
-    await message.reply(f"Сегодня ты — {choice} 😏")
-
-# ===== КОМАНДА /name =====
-@dp.message(F.text.lower().startswith("/name "))
-async def cmd_name(message: Message):
-    user_id = message.from_user.id
-    new_name = message.text[6:].strip()
-
-    if not new_name:
-        await message.reply("Напиши имя после команды, пример:\n/name Красавчик")
-        return
-
-    user_names[user_id] = new_name
-    await message.reply(f"Теперь твоё имя — {new_name} 😎")
-
-# ===== АДМИН КОМАНДА /add =====
 ADMIN_USERNAME = "Sugar_Daddy_rip"
+PROVIDER_TOKEN = ""  # если подключаешь Stars
 
-@dp.message(F.text.lower().startswith("/add "))
-async def cmd_add(message: Message):
-    if (message.from_user.username or "").lower() != ADMIN_USERNAME.lower():
-        return  # игнор, если не админ
+def declension_word(n: int) -> str:
+    # Возвращает пустую строку — мы убираем "размеров груди" везде по твоей просьбе.
+    return ""
 
-    parts = message.text.split()
-    if len(parts) != 3:
-        await message.reply("Использование: /add @username 10")
-        return
+def get_stored_name(chat_id, user_id):
+    row = db_execute("SELECT display_name FROM names WHERE chat_id=? AND user_id=?", (str(chat_id), str(user_id)), fetch=True)
+    if row:
+        return row[0]["display_name"]
+    return None
 
-    _, user_tag, value = parts
+def get_user_name_fallback(chat_id, user_id):
     try:
-        value = int(value)
-    except:
-        await message.reply("Размер должен быть числом.")
+        member = bot.get_chat_member(chat_id, user_id)
+        user = member.user
+        if getattr(user, "last_name", None):
+            return f"{user.first_name} {user.last_name}"
+        return user.first_name or "Пользователь"
+    except Exception:
+        return "Пользователь"
+
+def get_display_name(chat_id, user_id):
+    name = get_stored_name(chat_id, user_id)
+    if name:
+        return name
+    return get_user_name_fallback(chat_id, user_id)
+
+def change_boobs(chat_id, user_id):
+    today = datetime.date.today().isoformat()
+    chat = str(chat_id); user = str(user_id)
+    row = db_execute("SELECT size,last_date FROM boobs WHERE chat_id=? AND user_id=?", (chat, user), fetch=True)
+    if row:
+        size = row[0]["size"]
+        last = row[0]["last_date"]
+    else:
+        size = 0
+        last = None
+
+    if last == today:
+        return 0, size
+
+    delta = random.randint(-10, 10)
+    if size + delta < 0:
+        delta = -size
+    new_size = size + delta
+
+    db_execute("INSERT OR REPLACE INTO boobs(chat_id,user_id,size,last_date) VALUES (?,?,?,?)",
+               (chat, user, new_size, today))
+    return delta, new_size
+
+def whoami(chat_id, user_id):
+    today = datetime.date.today().isoformat()
+    chat = str(chat_id); user = str(user_id)
+    row = db_execute("SELECT choice,date FROM whoami WHERE chat_id=? AND user_id=?", (chat, user), fetch=True)
+    if row and row[0]["date"] == today:
+        return row[0]["choice"]
+    choice = random.choice(["ты лох 😏", "удивительно, но сегодня ты не лох 🎉"])
+    db_execute("INSERT OR REPLACE INTO whoami(chat_id,user_id,choice,date) VALUES (?,?,?,?)",
+               (chat, user, choice, today))
+    return choice
+
+@bot.message_handler(commands=['commands'])
+def cmd_commands(m):
+    bot.reply_to(m,
+                 "Привет! Я бот с грудями 😏\n\n"
+                 "Команды:\n"
+                 "/sisi — получить рост груди на сегодня 🍒\n"
+                 "/my — показать свой размер груди 🍒\n"
+                 "/buy_boobs — купить +1 груди за 5 ⭐ 🎉\n"
+                 "/top — топ участников по размеру груди 😎\n"
+                 "/name <имя> — установить своё отображаемое имя 😏\n"
+                 "/dr <дд.мм.гггг> — записать день рождения 🎂\n"
+                 "/dr all — список ДР в чате 🎂\n"
+                 "/kto — узнать, кто ты сегодня (1 раз в день) 😉")
+
+@bot.message_handler(commands=['sisi'])
+def cmd_sisi(m):
+    chat_id = m.chat.id; user_id = m.from_user.id
+    name = get_display_name(chat_id, user_id)
+    delta, new_size = change_boobs(chat_id, user_id)
+    if delta == 0:
+        bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой текущий размер груди — <b>{new_size}</b> 🍒")
+    else:
+        sign = f"{delta:+d}"
+        bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{sign}</b>, теперь твой размер груди — <b>{new_size}</b> 🍒")
+
+@bot.message_handler(commands=['my'])
+def cmd_my(m):
+    chat_id = str(m.chat.id); user = str(m.from_user.id)
+    row = db_execute("SELECT size FROM boobs WHERE chat_id=? AND user_id=?", (chat_id, user), fetch=True)
+    size = row[0]["size"] if row else 0
+    name = get_display_name(m.chat.id, m.from_user.id)
+    bot.reply_to(m, f"✨ {name}, твой текущий размер груди — <b>{size}</b> 🍒")
+
+@bot.message_handler(commands=['top'])
+def cmd_top(m):
+    chat_id = str(m.chat.id)
+    rows = db_execute("SELECT user_id,size FROM boobs WHERE chat_id=? ORDER BY size DESC LIMIT 10", (chat_id,), fetch=True)
+    if not rows:
+        bot.reply_to(m, "Пусто 😅")
+        return
+    text = "🏆 <b>ТОП сисек</b>:\n\n"
+    for i, r in enumerate(rows, start=1):
+        uid = r["user_id"]; size = r["size"]
+        name = get_display_name(chat_id, uid)
+        text += f"{i}. {name} — {size} 🍒\n"
+    bot.reply_to(m, text)
+
+@bot.message_handler(commands=['name'])
+def cmd_name(m):
+    parts = m.text.split(maxsplit=1)
+    if len(parts) < 2:
+        bot.reply_to(m, "Используй: /name ТвоёИмя")
+        return
+    chat_id = str(m.chat.id); user_id = str(m.from_user.id)
+    name_text = parts[1].strip()
+    db_execute("INSERT OR REPLACE INTO names(chat_id,user_id,display_name) VALUES (?,?,?)",
+               (chat_id, user_id, name_text))
+    bot.reply_to(m, f"🎉 Ваше имя изменено на '{name_text}'")
+
+@bot.message_handler(commands=['dr'])
+def cmd_dr(m):
+    parts = m.text.split()
+    chat_id = str(m.chat.id); user_id = str(m.from_user.id)
+    if len(parts) == 1:
+        row = db_execute("SELECT date FROM birthdays WHERE chat_id=? AND user_id=?", (chat_id, user_id), fetch=True)
+        if row:
+            bot.reply_to(m, f"🎂 Твой день рождения: {row[0]['date']}")
+        else:
+            bot.reply_to(m, "🎂 Ты ещё не указал день рождения")
+        return
+    if parts[1].lower() == "all":
+        rows = db_execute("SELECT user_id,date FROM birthdays WHERE chat_id=?", (chat_id,), fetch=True)
+        if not rows:
+            bot.reply_to(m, "🎂 Нет дней рождения 😅")
+            return
+        text = "🎂 Дни рождения чата:\n"
+        for r in rows:
+            uid = r["user_id"]; d = r["date"]
+            name = get_display_name(chat_id, uid)
+            text += f"{name} — {d}\n"
+        bot.reply_to(m, text)
+        return
+    date_text = parts[1]
+    if not re.match(r"\d{2}\.\d{2}\.\d{4}$", date_text):
+        bot.reply_to(m, "Используй формат: /dr дд.мм.гггг")
+        return
+    db_execute("INSERT OR REPLACE INTO birthdays(chat_id,user_id,date) VALUES (?,?,?)",
+               (chat_id, user_id, date_text))
+    bot.reply_to(m, f"🎂 День рождения сохранён: {date_text}")
+
+@bot.message_handler(commands=['kto'])
+def cmd_kto(m):
+    chat_id = str(m.chat.id); user_id = str(m.from_user.id)
+    res = whoami(chat_id, user_id)
+    bot.reply_to(m, res)
+
+@bot.message_handler(commands=['buy_boobs'])
+def cmd_buy(m):
+    chat = m.chat.id; uid = m.from_user.id
+    price = 5
+    payload = f"buy_boobs_{chat}_{uid}"
+    from telebot.types import LabeledPrice
+    prices = [LabeledPrice(label="1 единица груди", amount=price)]
+    bot.send_invoice(m.chat.id,
+                     title="Покупка груди",
+                     description="Покупка +1 груди за 5 ⭐",
+                     invoice_payload=payload,
+                     currency="XTR",
+                     prices=prices,
+                     provider_token=PROVIDER_TOKEN,
+                     start_parameter="buyboobs")
+
+@bot.pre_checkout_query_handler(func=lambda q: True)
+def precheckout(q):
+    bot.answer_pre_checkout_query(q.id, ok=True)
+
+@bot.message_handler(content_types=['successful_payment'])
+def got_payment(m):
+    payload = m.successful_payment.invoice_payload
+    if payload.startswith("buy_boobs_"):
+        _, chat, uid = payload.split("_")
+        row = db_execute("SELECT size FROM boobs WHERE chat_id=? AND user_id=?", (str(chat), str(uid)), fetch=True)
+        size = row[0]["size"] if row else 0
+        size += 1
+        db_execute("INSERT OR REPLACE INTO boobs(chat_id,user_id,size,last_date) VALUES (?,?,?,?)",
+                   (str(chat), str(uid), size, datetime.date.today().isoformat()))
+        name = get_display_name(chat, uid)
+        bot.send_message(int(chat), f"🎉 {name} купил(а) +1 груди!\nНовый размер: <b>{size}</b> 🍒")
+
+@bot.message_handler(func=lambda m: True, content_types=['text'])
+def general_handler(m):
+    text = (m.text or "").lower()
+    chat_id = m.chat.id
+    user_id = m.from_user.id
+
+    if text.startswith("/sisi") or "sisi" in text or "сиськи" in text:
+        name = get_display_name(chat_id, user_id)
+        delta, new_size = change_boobs(chat_id, user_id)
+        if delta == 0:
+            bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой текущий размер груди — <b>{new_size}</b> 🍒")
+        else:
+            sign = f"{delta:+d}"
+            bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{sign}</b>, теперь твой размер груди — <b>{new_size}</b> 🍒")
         return
 
-    if not user_tag.startswith("@"):
-        await message.reply("Укажи username через @")
+    if text.startswith("/kto") or "kto" in text or "кто же я" in text:
+        res = whoami(str(chat_id), str(user_id))
+        bot.reply_to(m, res)
         return
 
-    # В группах Telegram не предоставляет user_id по @username
-    # Поэтому админ должен применять /add ТОЛЬКО как ответ на сообщение
-    if not message.reply_to_message:
-        await message.reply("Ответь этой командой на сообщение нужного пользователя.")
-        return
-
-    target_id = message.reply_to_message.from_user.id
-    user_boobs[target_id] = user_boobs.get(target_id, 0) + value
-
-    await message.reply(f"Добавил +{value} к размеру груди пользователя.")
-
-# ===== КОМАНДА /komands =====
-@dp.message(F.text.lower() == "/komands")
-async def cmd_commands(message: Message):
-    await message.reply(
-        "📌 Список команд:\n"
-        "/sisi — получить прирост груди (1 раз в день)\n"
-        "/my — узнать свой размер\n"
-        "/kto — кто ты сегодня\n"
-        "/name — изменить своё имя\n"
-        "/top — топ сисек чата\n"
-        "/komands — список команд"
-    )
-
-# ===== КОМАНДА /top =====
-@dp.message(F.text.lower() == "/top")
-async def cmd_top(message: Message):
-    if not user_boobs:
-        await message.reply("Топ пуст 😔")
-        return
-
-    sorted_users = sorted(user_boobs.items(), key=lambda x: x[1], reverse=True)
-    lines = ["🏆 ТОП сисек:\n"]
-
-    for i, (user_id, size) in enumerate(sorted_users, start=1):
-        name = user_names.get(user_id, f"User {user_id}")
-        lines.append(f"{i}. {name} — {size} 🍒")
-
-    await message.reply("\n".join(lines))
-
-# ===== СТАРТ =====
-async def main():
-    print("Bot started!")
-    await dp.start_polling(bot)
-
-asyncio.run(main())
+if __name__ == "__main__":
+    bot.infinity_polling(skip_pending=True)
