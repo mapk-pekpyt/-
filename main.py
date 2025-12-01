@@ -1,23 +1,16 @@
-import os
-import importlib
-import telebot
+# main.py
+from telebot import TeleBot
 from config import TOKEN
-from utils.db import init_db
+from plugins.loader import load_plugins
+from utils.db import init_db, get_db_utils
 
-bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
+bot = TeleBot(TOKEN, parse_mode="HTML")
+
+# Инициализация БД (создает таблицы если нужно)
 init_db()
 
-print("Загружаю плагины...")
-for file in os.listdir("plugins"):
-    if file.endswith(".py") and not file.startswith("_"):
-        name = file[:-3]
-        try:
-            module = importlib.import_module(f"plugins.{name}")
-            if hasattr(module, "register"):
-                module.register(bot)
-                print(f"Загружен: {name}")
-        except Exception as e:
-            print(f"Ошибка {name}: {e}")
+# Передаём бот и утилиты при загрузке плагинов
+load_plugins(bot, get_db_utils())
 
-print("Бот запущен!")
+print("Bot started (plugins loaded).")
 bot.infinity_polling(skip_pending=True)
