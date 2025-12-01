@@ -1,4 +1,4 @@
-# main.py — восстановленная рабочая версия (pyTelegramBotAPI)
+# main.py — исправленная версия (pyTelegramBotAPI)
 import os
 import sqlite3
 import telebot
@@ -11,7 +11,6 @@ bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 DB = "boobs.db"
 
-# ---------- DB helpers ----------
 def db_conn():
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
@@ -26,7 +25,7 @@ def db_execute(query, params=(), fetch=False):
     conn.close()
     return data
 
-# ---------- Init tables ----------
+# Init tables
 db_execute("""CREATE TABLE IF NOT EXISTS boobs (
     chat_id TEXT,
     user_id TEXT,
@@ -57,29 +56,45 @@ db_execute("""CREATE TABLE IF NOT EXISTS birthdays (
     PRIMARY KEY(chat_id, user_id)
 )""")
 
-# ---------- Settings ----------
 ADMIN_USERNAME = "Sugar_Daddy_rip"
-PROVIDER_TOKEN = ""  # вставь provider_token если хочешь принимать Stars
+PROVIDER_TOKEN = ""  # если будешь подключать Stars
 
-# ---------- Utilities ----------
-def format_boobs(n: int) -> str:
-    # 1 -> "1 размер груди"
-    # 2-4 -> "2 размера груди"
-    # 5+ -> "5 размеров груди"
+# --- склонение: возвращает только слово-окончание фразы, без числа
+def declension(n: int) -> str:
+    # Возвращает правильное окончание: "размер груди", "размера груди", "размеров груди"
     if n % 10 == 1 and n % 100 != 11:
-        return f"{n} размер груди"
-    elif n % 10 in (2,3,4) and not (12 <= n % 100 <= 14):
-        return f"{n} размера груди"
+        return "размер груди"
+    elif 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+        return "размера груди"
     else:
-        return f"{n} размеров груди"
+        return "размеров груди"
 
-def get_display_name(chat_id, user_id, fallback_name):
+def get_stored_name(chat_id, user_id):
     row = db_execute("SELECT display_name FROM names WHERE chat_id=? AND user_id=?", (str(chat_id), str(user_id)), fetch=True)
-    return row[0]["display_name"] if row else fallback_name
+    if row:
+        return row[0]["display_name"]
+    return None
 
-# ---------- Core logic ----------
+def get_user_name_fallback(chat_id, user_id):
+    # Пытаемся получить имя через API (если бот имеет доступ), иначе вернём "Пользователь"
+    try:
+        member = bot.get_chat_member(chat_id, user_id)
+        user = member.user
+        # используем first_name + (last_name если есть)
+        if getattr(user, "last_name", None):
+            return f"{user.first_name} {user.last_name}"
+        return user.first_name or f"Пользователь"
+    except Exception:
+        return "Пользователь"
+
+def get_display_name(chat_id, user_id):
+    name = get_stored_name(chat_id, user_id)
+    if name:
+        return name
+    return get_user_name_fallback(chat_id, user_id)
+
+# core logic
 def change_boobs(chat_id, user_id):
-    """Возвращает (delta, new_size). delta==0 если уже выдавали сегодня."""
     today = datetime.date.today().isoformat()
     chat = str(chat_id); user = str(user_id)
     row = db_execute("SELECT size,last_date FROM boobs WHERE chat_id=? AND user_id=?", (chat, user), fetch=True)
@@ -93,7 +108,6 @@ def change_boobs(chat_id, user_id):
     if last == today:
         return 0, size
 
-    # выпадение от -10 до 10, но не делаем отрицательный итог
     delta = random.randint(-10, 10)
     if size + delta < 0:
         delta = -size
@@ -114,7 +128,7 @@ def whoami(chat_id, user_id):
                (chat, user, choice, today))
     return choice
 
-# ---------- Commands (English) but messages Russian ----------
+# --- Commands (English) with Russian messages
 @bot.message_handler(commands=['commands'])
 def cmd_commands(m):
     bot.reply_to(m,
@@ -132,21 +146,22 @@ def cmd_commands(m):
 @bot.message_handler(commands=['sisi'])
 def cmd_sisi(m):
     chat_id = m.chat.id; user_id = m.from_user.id
-    name = get_display_name(chat_id, user_id, m.from_user.first_name)
+    name = get_display_name(chat_id, user_id)
     delta, new_size = change_boobs(chat_id, user_id)
     if delta == 0:
-        bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой размер груди равен <b>{new_size}</b> {format_boobs(new_size)} 🍒")
+        bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой текущий размер груди равен <b>{new_size}</b> {declension(new_size)} 🍒")
     else:
+        # sign display: +6 or -3
         sign = f"{delta:+d}"
-        bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{sign}</b>, теперь твой размер груди равен <b>{new_size}</b> {format_boobs(new_size)} 🍒")
+        bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{sign}</b>, теперь твой размер груди равен <b>{new_size}</b> {declension(new_size)} 🍒")
 
 @bot.message_handler(commands=['my'])
 def cmd_my(m):
     chat_id = str(m.chat.id); user = str(m.from_user.id)
     row = db_execute("SELECT size FROM boobs WHERE chat_id=? AND user_id=?", (chat_id, user), fetch=True)
     size = row[0]["size"] if row else 0
-    name = get_display_name(m.chat.id, m.from_user.id, m.from_user.first_name)
-    bot.reply_to(m, f"✨ {name}, твой текущий размер груди: <b>{size}</b> {format_boobs(size)} 🍒")
+    name = get_display_name(m.chat.id, m.from_user.id)
+    bot.reply_to(m, f"✨ {name}, твой текущий размер груди: <b>{size}</b> {declension(size)} 🍒")
 
 @bot.message_handler(commands=['top'])
 def cmd_top(m):
@@ -158,8 +173,8 @@ def cmd_top(m):
     text = "🏆 <b>ТОП груди</b>:\n\n"
     for i, r in enumerate(rows, start=1):
         uid = r["user_id"]; size = r["size"]
-        name = get_display_name(chat_id, uid, f"<a href='tg://user?id={uid}'>Пользователь</a>")
-        text += f"{i}. {name} — <b>{size}</b> {format_boobs(size)} 🍒\n"
+        name = get_display_name(chat_id, uid)
+        text += f"{i}. {name} — <b>{size}</b> {declension(size)} 🍒\n"
     bot.reply_to(m, text)
 
 @bot.message_handler(commands=['name'])
@@ -193,7 +208,7 @@ def cmd_dr(m):
         text = "🎂 Дни рождения чата:\n"
         for r in rows:
             uid = r["user_id"]; d = r["date"]
-            name = get_display_name(chat_id, uid, f"<a href='tg://user?id={uid}'>Пользователь</a>")
+            name = get_display_name(chat_id, uid)
             text += f"{name} — {d}\n"
         bot.reply_to(m, text)
         return
@@ -211,15 +226,15 @@ def cmd_kto(m):
     res = whoami(chat_id, user_id)
     bot.reply_to(m, res)
 
-# buy via Telegram Stars (only works if provider_token set and available in your region)
+# buy via Telegram Stars (provider token must be set & available in your region)
 @bot.message_handler(commands=['buy_boobs'])
 def cmd_buy(m):
     chat = m.chat.id; uid = m.from_user.id
-    price = 5  # stars
+    price = 5
     payload = f"buy_boobs_{chat}_{uid}"
     from telebot.types import LabeledPrice
     prices = [LabeledPrice(label="1 единица груди", amount=price)]
-    bot.send_invoice(chat.id if hasattr(chat, 'id') else chat,
+    bot.send_invoice(m.chat.id,
                      title="Покупка груди",
                      description="Покупка +1 груди за 5 ⭐",
                      invoice_payload=payload,
@@ -242,33 +257,31 @@ def got_payment(m):
         size += 1
         db_execute("INSERT OR REPLACE INTO boobs(chat_id,user_id,size,last_date) VALUES (?,?,?,?)",
                    (str(chat), str(uid), size, datetime.date.today().isoformat()))
-        bot.send_message(int(chat), f"🎉 Пользователь купил +1 груди!\nНовый размер: <b>{size}</b> {format_boobs(size)} 🍒")
+        name = get_display_name(chat, uid)
+        bot.send_message(int(chat), f"🎉 {name} купил(а) +1 груди!\nНовый размер: <b>{size}</b> {declension(size)} 🍒")
 
-# ---------- Catch plain messages (works in groups and PM) ----------
+# catch plain messages (works in groups and PM)
 @bot.message_handler(func=lambda m: True, content_types=['text'])
 def general_handler(m):
-    text = m.text or ""
-    text_lower = text.lower()
+    text = (m.text or "").lower()
     chat_id = m.chat.id
     user_id = m.from_user.id
 
-    # allow both "/sisi" or plain "sisi" or "сиськи"
-    if text_lower.startswith("/sisi") or "sisi" in text_lower or "сиськи" in text_lower:
-        # call the same logic as /sisi
+    if text.startswith("/sisi") or "sisi" in text or "сиськи" in text:
+        # reuse same logic as command
+        name = get_display_name(chat_id, user_id)
         delta, new_size = change_boobs(chat_id, user_id)
-        name = get_display_name(chat_id, user_id, m.from_user.first_name)
         if delta == 0:
-            bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой размер груди равен <b>{new_size}</b> {format_boobs(new_size)} 🍒")
+            bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой текущий размер груди равен <b>{new_size}</b> {declension(new_size)} 🍒")
         else:
             sign = f"{delta:+d}"
-            bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{sign}</b>, теперь твой размер груди равен <b>{new_size}</b> {format_boobs(new_size)} 🍒")
+            bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{sign}</b>, теперь твой размер груди равен <b>{new_size}</b> {declension(new_size)} 🍒")
         return
 
-    if text_lower.startswith("/kto") or "kto" in text_lower or "кто же я" in text_lower:
+    if text.startswith("/kto") or "kto" in text or "кто же я" in text:
         res = whoami(str(chat_id), str(user_id))
         bot.reply_to(m, res)
         return
 
-# ---------- Start polling ----------
 if __name__ == "__main__":
     bot.infinity_polling(skip_pending=True)
