@@ -6,7 +6,7 @@ import datetime
 import re
 import os
 
-TOKEN = os.environ.get("BOT_TOKEN")  # или вставь прямо свой токен
+TOKEN = os.environ.get("BOT_TOKEN")  # или вставь свой токен напрямую
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 # ==========================
@@ -127,28 +127,29 @@ def cmd_start(m):
                     "кто же я — бот рандомно отвечает один раз в день 😉")
 
 # ==========================
-# КОМАНДА "СИСКИ"
+# ОБРАБОТКА СООБЩЕНИЙ В ЛС И ГРУППАХ
 # ==========================
-@bot.message_handler(func=lambda m: "сиськи" in m.text.lower())
-def boobs_handler(m):
+@bot.message_handler(func=lambda m: True)
+def general_handler(m):
+    text = m.text.lower()
     chat_id = m.chat.id
     user_id = m.from_user.id
-    delta, new_size = change_boobs(chat_id, user_id)
     name = get_display_name(chat_id, user_id) or m.from_user.first_name
-    if delta == 0:
-        bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
-    else:
-        bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{delta}</b>, теперь твой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
 
-# ==========================
-# КТО ЖЕ Я
-# ==========================
-@bot.message_handler(func=lambda m: "кто же я" in m.text.lower())
-def whoami_handler(m):
-    chat_id = m.chat.id
-    user_id = m.from_user.id
-    answer = whoami(chat_id, user_id)
-    bot.reply_to(m, answer)
+    # сиськи
+    if "сиськи" in text:
+        delta, new_size = change_boobs(chat_id, user_id)
+        if delta == 0:
+            bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
+        else:
+            bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{delta}</b>, теперь твой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
+        return
+
+    # кто же я
+    if "кто же я" in text:
+        answer = whoami(chat_id, user_id)
+        bot.reply_to(m, answer)
+        return
 
 # ==========================
 # МОЙ РАЗМЕР
