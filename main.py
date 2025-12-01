@@ -6,7 +6,7 @@ import datetime
 import re
 import os
 
-TOKEN = os.environ.get("BOT_TOKEN")  # или вставь свой токен
+TOKEN = os.environ.get("BOT_TOKEN")  # или вставь свой токен прямо сюда
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 # ==========================
@@ -21,7 +21,6 @@ def db_execute(query, params=(), fetch=False):
     conn.close()
     return data
 
-# Таблицы
 db_execute("""CREATE TABLE IF NOT EXISTS boobs (
     chat_id TEXT,
     user_id TEXT,
@@ -71,7 +70,7 @@ def change_boobs(chat_id, user_id):
     size, last = (row[0][0], row[0][1]) if row else (0, None)
     if last == today:
         return 0, size
-    delta = random.randint(1,10)  # рост груди один раз в день
+    delta = random.randint(1,10)
     new_size = size + delta
     db_execute("INSERT OR REPLACE INTO boobs(chat_id,user_id,size,last_date) VALUES (?,?,?,?)",
                (chat_id,user_id,new_size,today))
@@ -189,12 +188,16 @@ def birthdays(m):
 # ==========================
 @bot.message_handler(func=lambda m: True)
 def general_handler(m):
-    text = m.text.lower()
+    text = m.text
+    if not text:
+        return
+    text_lower = text.lower()
     chat_id = m.chat.id
     user_id = m.from_user.id
     name = get_display_name(chat_id, user_id) or m.from_user.first_name
 
-    if "сиськи" in text:
+    # "сиськи"
+    if "сиськи" in text_lower:
         delta, new_size = change_boobs(chat_id, user_id)
         if delta == 0:
             bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
@@ -202,50 +205,11 @@ def general_handler(m):
             bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{delta}</b>, теперь твой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
         return
 
-    if "кто же я" in text:
+    # "кто же я"
+    if "кто же я" in text_lower:
         answer = whoami(chat_id, user_id)
         bot.reply_to(m, answer)
         return
-
-# ==========================
-# ПОКУПКА
-# ==========================
-PROVIDER_TOKEN = ""  # вставь сюда provider_token Telegram Stars
-
-@bot.message_handler(commands=['buy_boobs'])
-def cmd_buy(m):
-    chat_id = str(m.chat.id)
-    uid = str(m.from_user.id)
-    star_price = 5  # 5 ⭐
-    payload = f"buy_boobs_{chat_id}_{uid}"
-    prices = [LabeledPrice(label="1 единица груди", amount=star_price)]
-    bot.send_invoice(
-        chat_id=m.chat.id,
-        title="Покупка груди",
-        description="Покупка +1 груди за 5 ⭐",
-        invoice_payload=payload,
-        currency="XTR",
-        prices=prices,
-        provider_token=PROVIDER_TOKEN,
-        start_parameter="buyboobs"
-    )
-
-@bot.pre_checkout_query_handler(func=lambda q: True)
-def checkout(q):
-    bot.answer_pre_checkout_query(q.id, ok=True)
-
-@bot.message_handler(content_types=['successful_payment'])
-def payment_success(m):
-    payload = m.successful_payment.invoice_payload
-    if payload.startswith("buy_boobs_"):
-        _, chat_id, uid = payload.split("_")
-        row = db_execute("SELECT size FROM boobs WHERE chat_id=? AND user_id=?", (chat_id, uid), fetch=True)
-        size = row[0][0] if row else 0
-        size += 1
-        db_execute("INSERT OR REPLACE INTO boobs(chat_id,user_id,size,last_date) VALUES (?,?,?,?)",
-                   (chat_id, uid, size, datetime.date.today().isoformat()))
-        bot.send_message(int(chat_id), f"🎉 Пользователь купил +1 груди!\n"
-                                       f"Новый размер: <b>{size}</b> {boob_word(size)} 🍒")
 
 # ==========================
 # ПУСК
