@@ -1,4 +1,3 @@
-# main.py
 import os
 import importlib
 import telebot
@@ -6,25 +5,19 @@ from config import TOKEN
 from utils.db import init_db
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
-
-# Инициализация БД
 init_db()
 
-# Автозагрузка плагинов
-print("Загрузка плагинов...")
-for filename in os.listdir("plugins"):
-    if filename.endswith(".py") and not filename.startswith("_"):
-        module_name = filename[:-3]
+print("Загружаю плагины...")
+for file in os.listdir("plugins"):
+    if file.endswith(".py") and not file.startswith("_"):
+        name = file[:-3]
         try:
-            module = importlib.import_module(f"plugins.{module_name}")
+            module = importlib.import_module(f"plugins.{name}")
             if hasattr(module, "register"):
                 module.register(bot)
-                print(f"Плагин загружен: {module_name}")
-            else:
-                print(f"Нет register() в {module_name}")
+                print(f"Загружен: {name}")
         except Exception as e:
-            print(f"Ошибка загрузки {module_name}: {e}")
+            print(f"Ошибка {name}: {e}")
 
-if __name__ == "__main__":
-    print("Бот запущен и готов к работе!")
-    bot.infinity_polling(skip_pending=True)
+print("Бот запущен!")
+bot.infinity_polling(skip_pending=True)
