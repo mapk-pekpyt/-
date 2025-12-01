@@ -6,7 +6,7 @@ import datetime
 import re
 import os
 
-TOKEN = os.environ.get("BOT_TOKEN")
+TOKEN = os.environ.get("BOT_TOKEN")  # или вставь прямо свой токен
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 # ==========================
@@ -81,7 +81,7 @@ def change_boobs(chat_id, user_id):
     row = db_execute("SELECT size,last_date FROM boobs WHERE chat_id=? AND user_id=?", (chat_id, user_id), fetch=True)
     size, last = (row[0][0], row[0][1]) if row else (0, None)
     if last == today:
-        return 0, size  # Уже выпадало сегодня
+        return 0, size
     delta = random.randint(-10,10)
     if size + delta < 0:
         delta = -size
@@ -102,7 +102,6 @@ def whoami(chat_id, user_id):
     return choice
 
 def boob_word(n):
-    """Возвращает правильное склонение слова 'грудь'"""
     if n % 10 == 1 and n % 100 != 11:
         return "грудь"
     elif 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
@@ -128,14 +127,14 @@ def cmd_start(m):
                     "кто же я — бот рандомно отвечает один раз в день 😉")
 
 # ==========================
-# СЛОВО "СИСКИ"
+# КОМАНДА "СИСКИ"
 # ==========================
 @bot.message_handler(func=lambda m: "сиськи" in m.text.lower())
 def boobs_handler(m):
-    delta, new_size = change_boobs(m.chat.id, m.from_user.id)
-    name = get_display_name(m.chat.id, m.from_user.id)
-    if not name:
-        name = m.from_user.first_name
+    chat_id = m.chat.id
+    user_id = m.from_user.id
+    delta, new_size = change_boobs(chat_id, user_id)
+    name = get_display_name(chat_id, user_id) or m.from_user.first_name
     if delta == 0:
         bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
     else:
@@ -146,7 +145,9 @@ def boobs_handler(m):
 # ==========================
 @bot.message_handler(func=lambda m: "кто же я" in m.text.lower())
 def whoami_handler(m):
-    answer = whoami(m.chat.id, m.from_user.id)
+    chat_id = m.chat.id
+    user_id = m.from_user.id
+    answer = whoami(chat_id, user_id)
     bot.reply_to(m, answer)
 
 # ==========================
@@ -156,9 +157,7 @@ def whoami_handler(m):
 def cmd_my(m):
     chat_id, user_id = str(m.chat.id), str(m.from_user.id)
     row = db_execute("SELECT size FROM boobs WHERE chat_id=? AND user_id=?", (chat_id,user_id), fetch=True)
-    name = get_display_name(m.chat.id, user_id)
-    if not name:
-        name = m.from_user.first_name
+    name = get_display_name(chat_id, user_id) or m.from_user.first_name
     if not row:
         bot.reply_to(m, f"🍒 {name}, у тебя ещё нет размера 😅 Напиши 'сиськи' чтобы получить.")
         return
@@ -176,9 +175,7 @@ def cmd_top(m):
         return
     text = "🏆 <b>ТОП груди</b>:\n\n"
     for i,(uid,size) in enumerate(rows,start=1):
-        name = get_display_name(chat_id,uid)
-        if not name:
-            name = f"<a href='tg://user?id={uid}'>Пользователь</a>"
+        name = get_display_name(chat_id,uid) or f"<a href='tg://user?id={uid}'>Пользователь</a>"
         text += f"{i}. {name} — <b>{size}</b> {boob_word(size)} 🍒\n"
     bot.reply_to(m,text)
 
@@ -222,9 +219,7 @@ def birthdays(m):
             return
         text = "🎂 Дни рождения чата:\n"
         for uid,date in rows:
-            name = get_display_name(chat_id,uid)
-            if not name:
-                name = f"<a href='tg://user?id={uid}'>Пользователь</a>"
+            name = get_display_name(chat_id,uid) or f"<a href='tg://user?id={uid}'>Пользователь</a>"
             text += f"{name} — {date}\n"
         bot.reply_to(m,text)
         return
@@ -239,8 +234,10 @@ def birthdays(m):
     bot.reply_to(m,f"🎂 День рождения сохранён: {date_text}")
 
 # ==========================
-# ПОКУПКА +1 ГРУДИ ЗА 5 ⭐
+# ПОКУПКА +1 ГРУДИ ЗА 5 ⭐ (Telegram Stars)
 # ==========================
+PROVIDER_TOKEN = ""  # вставь сюда provider_token Telegram Stars
+
 @bot.message_handler(commands=['buy_boobs'])
 def cmd_buy(m):
     chat_id = str(m.chat.id)
@@ -255,7 +252,7 @@ def cmd_buy(m):
         invoice_payload=payload,
         currency="XTR",
         prices=prices,
-        provider_token="",  # Telegram Stars
+        provider_token=PROVIDER_TOKEN,
         start_parameter="buyboobs"
     )
 
