@@ -81,14 +81,14 @@ def change_boobs(chat_id, user_id):
     row = db_execute("SELECT size,last_date FROM boobs WHERE chat_id=? AND user_id=?", (chat_id, user_id), fetch=True)
     size, last = (row[0][0], row[0][1]) if row else (0, None)
     if last == today:
-        return size  # Уже выпало сегодня
+        return 0, size  # Уже выпадало сегодня
     delta = random.randint(-10,10)
     if size + delta < 0:
         delta = -size
     new_size = size + delta
     db_execute("INSERT OR REPLACE INTO boobs(chat_id,user_id,size,last_date) VALUES (?,?,?,?)",
                (chat_id,user_id,new_size,today))
-    return new_size
+    return delta, new_size
 
 def whoami(chat_id, user_id):
     today = datetime.date.today().isoformat()
@@ -101,6 +101,15 @@ def whoami(chat_id, user_id):
                (chat_id,user_id,choice,today))
     return choice
 
+def boob_word(n):
+    """Возвращает правильное склонение слова 'грудь'"""
+    if n % 10 == 1 and n % 100 != 11:
+        return "грудь"
+    elif 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+        return "груди"
+    else:
+        return "грудей"
+
 # ==========================
 # СТАРТОВЫЕ КОМАНДЫ
 # ==========================
@@ -108,13 +117,11 @@ def whoami(chat_id, user_id):
 def cmd_start(m):
     bot.reply_to(m, "Привет! Я бот с грудями 😏\n\n"
                     "Команды и функции:\n"
-                    "сиськи — выдать размер груди на сегодня 🍒\n"
+                    "сиськи — получить рост груди на сегодня 🍒\n"
                     "/my — показать свой размер груди 🍒\n"
                     "/buy_boobs — купить +1 груди за 5 ⭐ 🎉\n"
                     "/top — топ участников по размеру груди 😎\n"
-                    "/адд @username 10 — админ добавляет размер 🍒\n"
                     "/имя Лох — установить своё имя для отображения 😏\n"
-                    "/имя @username Любой текст — админ может изменить имя пользователя 🎉\n"
                     "/dr дд.мм.гггг — записать свой день рождения 🎂\n"
                     "/dr — показать свой день рождения 🎂\n"
                     "/dr all — список всех ДР в чате 🎂\n"
@@ -125,11 +132,14 @@ def cmd_start(m):
 # ==========================
 @bot.message_handler(func=lambda m: "сиськи" in m.text.lower())
 def boobs_handler(m):
-    new_size = change_boobs(m.chat.id, m.from_user.id)
+    delta, new_size = change_boobs(m.chat.id, m.from_user.id)
     name = get_display_name(m.chat.id, m.from_user.id)
     if not name:
         name = m.from_user.first_name
-    bot.reply_to(m, f"🍒 {name}, твой размер груди сегодня: <b>{new_size}</b> 🍒")
+    if delta == 0:
+        bot.reply_to(m, f"Ой, а ты уже пробовал сегодня 😅\nТвой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
+    else:
+        bot.reply_to(m, f"🍒 {name}, твой размер груди вырос на <b>{delta}</b>, теперь твой размер груди равен <b>{new_size}</b> {boob_word(new_size)} 🍒")
 
 # ==========================
 # КТО ЖЕ Я
@@ -152,7 +162,7 @@ def cmd_my(m):
     if not row:
         bot.reply_to(m, f"🍒 {name}, у тебя ещё нет размера 😅 Напиши 'сиськи' чтобы получить.")
         return
-    bot.reply_to(m, f"✨ {name}, твой текущий размер груди: <b>{row[0][0]}</b> 🍒")
+    bot.reply_to(m, f"✨ {name}, твой текущий размер груди: <b>{row[0][0]}</b> {boob_word(row[0][0])} 🍒")
 
 # ==========================
 # ТОП
@@ -169,77 +179,21 @@ def cmd_top(m):
         name = get_display_name(chat_id,uid)
         if not name:
             name = f"<a href='tg://user?id={uid}'>Пользователь</a>"
-        text += f"{i}. {name} — <b>{size}</b> 🍒\n"
+        text += f"{i}. {name} — <b>{size}</b> {boob_word(size)} 🍒\n"
     bot.reply_to(m,text)
 
 # ==========================
-# ДОБАВИТЬ РАЗМЕР (АДМИН)
-# ==========================
-@bot.message_handler(commands=['адд'])
-def cmd_add(m):
-    if not is_admin(m.from_user):
-        bot.reply_to(m,"Нет доступа ❌")
-        return
-    cmd = m.text.split()
-    if len(cmd) != 3:
-        bot.reply_to(m,"Используй: /адд @username 10")
-        return
-    target, add = cmd[1], int(cmd[2])
-    chat_id = str(m.chat.id)
-    uid = None
-    try:
-        members = bot.get_chat_administrators(m.chat.id)
-    except:
-        bot.reply_to(m,"Ошибка доступа к списку участников")
-        return
-    for adm in members:
-        if adm.user.username and ("@" + adm.user.username.lower()) == target.lower():
-            uid = adm.user.id
-            break
-    if not uid:
-        bot.reply_to(m,"Пользователь не найден")
-        return
-    row = db_execute("SELECT size FROM boobs WHERE chat_id=? AND user_id=?", (chat_id, uid), fetch=True)
-    size = row[0][0] if row else 0
-    size += add
-    db_execute("INSERT OR REPLACE INTO boobs(chat_id,user_id,size,last_date) VALUES (?,?,?,?)",
-               (chat_id, uid, size, datetime.date.today().isoformat()))
-    bot.reply_to(m,f"🍒 Пользователю {target} добавлено +{add} к груди! Новый размер: <b>{size}</b> 🍒")
-
-# ==========================
-# ИМЯ (ПОЛНОСТЬЮ /имя)
+# ИМЯ
 # ==========================
 @bot.message_handler(commands=['имя'])
 def set_name(m):
     chat_id = str(m.chat.id)
     user_id = str(m.from_user.id)
-    parts = m.text.split(maxsplit=2)
+    parts = m.text.split(maxsplit=1)
     if len(parts)<2:
-        bot.reply_to(m,"Используй: /имя Лох или /имя @username Любой текст (для админа)")
+        bot.reply_to(m,"Используй: /имя Лох")
         return
-    # Админ меняет имя другого пользователя
-    if len(parts) == 3 and parts[1].startswith("@") and is_admin(m.from_user):
-        target_username = parts[1]
-        name_text = parts[2]
-        uid = None
-        try:
-            members = bot.get_chat_administrators(m.chat.id)
-        except:
-            bot.reply_to(m,"Ошибка доступа")
-            return
-        for adm in members:
-            if adm.user.username and ("@" + adm.user.username.lower()) == target_username.lower():
-                uid = adm.user.id
-                break
-        if not uid:
-            bot.reply_to(m,"Пользователь не найден")
-            return
-        db_execute("INSERT OR REPLACE INTO names(chat_id,user_id,display_name) VALUES (?,?,?)",
-                   (chat_id,uid,name_text))
-        bot.reply_to(m,f"🎉 Имя пользователя {target_username} изменено на '{name_text}'")
-        return
-    # Пользователь меняет своё имя
-    name_text = " ".join(parts[1:])
+    name_text = parts[1]
     db_execute("INSERT OR REPLACE INTO names(chat_id,user_id,display_name) VALUES (?,?,?)",
                (chat_id,user_id,name_text))
     bot.reply_to(m,f"🎉 Ваше имя изменено на '{name_text}'")
@@ -320,7 +274,7 @@ def payment_success(m):
         db_execute("INSERT OR REPLACE INTO boobs(chat_id,user_id,size,last_date) VALUES (?,?,?,?)",
                    (chat_id, uid, size, datetime.date.today().isoformat()))
         bot.send_message(int(chat_id), f"🎉 Пользователь купил +1 груди!\n"
-                                       f"Новый размер: <b>{size}</b> 🍒")
+                                       f"Новый размер: <b>{size}</b> {boob_word(size)} 🍒")
 
 # ==========================
 # ПУСК
