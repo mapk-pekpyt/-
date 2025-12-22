@@ -1,2 +1,4 @@
-pyTelegramBotAPI==4.15.4
+aiogram==3.10.0
+sqlalchemy==2.0.25
+aiohttp==3.9.1
 python-dotenv==1.0.0
