@@ -3,11 +3,11 @@ import asyncio
 import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # вставь сюда свой токен бота
 TRIBUTE_API_KEY = "42d4d099-20fd-4f55-a196-d77d9fed"
-TRIBUTE_PAYMENT_URL = "https://t.me/tribute/app?startapp=poWz"
+TRIBUTE_PAYMENT_URL = "https://t.me/tribute/app?startapp=poWz"  # тариф Неделя
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -20,8 +20,11 @@ async def cmd_start(message: types.Message):
 # --- Команда /buy_week ---
 @dp.message(Command("buy_week"))
 async def buy_week(message: types.Message):
-    kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("Оплатить Неделя — 100₽", url=TRIBUTE_PAYMENT_URL))
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton("Оплатить Неделя — 100₽", url=TRIBUTE_PAYMENT_URL)]
+        ]
+    )
     await message.answer("Нажми кнопку и оплати в Tribute:", reply_markup=kb)
     await message.answer("После оплаты нажми /check_payment чтобы подтвердить.")
 
