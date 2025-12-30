@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, types
 
 # --- Загружаем токены из переменных окружения ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # Telegram Bot token
-TRIBUTE_API_KEY = os.getenv("TRIBUTE_API_KEY")  # Tribute API key
+TRIBUTE_API_KEY = os.getenv("42d4d099-20fd-4f55-a196-d77d9fed")  # Tribute API key
 TRIBUTE_PAYMENT_URL = "https://t.me/tribute/app?startapp=poWz"  # тариф Неделя
 
 if not BOT_TOKEN:
