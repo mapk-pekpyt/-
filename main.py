@@ -1,10 +1,17 @@
+import os
 import asyncio
 import aiohttp
 from aiogram import Bot, Dispatcher, types
 
-BOT_TOKEN = "ВАШ_BOT_TOKEN_HERE"  # вставь сюда токен бота
-TRIBUTE_API_KEY = "42d4d099-20fd-4f55-a196-d77d9fed"  # твой тестовый API ключ
+# --- Загружаем токены из переменных окружения ---
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Telegram Bot token
+TRIBUTE_API_KEY = os.getenv("TRIBUTE_API_KEY")  # Tribute API key
 TRIBUTE_PAYMENT_URL = "https://t.me/tribute/app?startapp=poWz"  # тариф Неделя
+
+if not BOT_TOKEN:
+    raise Exception("BOT_TOKEN не задан! Установи переменную окружения.")
+if not TRIBUTE_API_KEY:
+    raise Exception("TRIBUTE_API_KEY не задан! Установи переменную окружения.")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -30,7 +37,7 @@ async def check_payment(message: types.Message):
         async with session.get("https://tribute.tg/api/v1/payments", headers=headers) as resp:
             data = await resp.json()
 
-    # Если есть хотя бы один платёж со статусом "paid", подтверждаем
+    # Проверка: если есть хотя бы один платёж со статусом "paid"
     paid = any(payment.get("status") == "paid" for payment in data.get("payments", []))
 
     if paid:
