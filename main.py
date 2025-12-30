@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # вставь сюда свой токен бота
 TRIBUTE_API_KEY = "42d4d099-20fd-4f55-a196-d77d9fed"
-TRIBUTE_PAYMENT_URL = "https://t.me/tribute/app?startapp=poWz"  # тариф Неделя
+TRIBUTE_PAYMENT_URL = "https://t.me/tribute/app?startapp=poWz"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -22,7 +22,7 @@ async def cmd_start(message: types.Message):
 async def buy_week(message: types.Message):
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton("Оплатить Неделя — 100₽", url=TRIBUTE_PAYMENT_URL)]
+            [InlineKeyboardButton(text="Оплатить Неделя — 100₽", url=TRIBUTE_PAYMENT_URL)]
         ]
     )
     await message.answer("Нажми кнопку и оплати в Tribute:", reply_markup=kb)
@@ -36,7 +36,6 @@ async def check_payment(message: types.Message):
         async with session.get("https://tribute.tg/api/v1/payments", headers=headers) as resp:
             data = await resp.json()
 
-    # Проверка оплаты
     paid = any(payment.get("status") == "paid" for payment in data.get("payments", []))
 
     if paid:
